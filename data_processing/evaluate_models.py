@@ -26,7 +26,6 @@ def csv_to_dataframe(thingy_file, respeck_file):
                     'subject_id'   :'T_subject_id',
                     'activity_code':'T_activity_code',
                     'activity_type':'T_activity_type'})
-        #thingy_dataframe = thingy_dataframe.sort_values(by=['T_subject_id', 'T_activity_code', 'timestamp']).reset_index(drop=True)
         thingy = True
     except:
         print("Thingy file was not found.")
@@ -42,24 +41,44 @@ def csv_to_dataframe(thingy_file, respeck_file):
                         'subject_id'   :'R_subject_id',
                         'activity_code':'R_activity_code',
                         'activity_type':'R_activity_type'})
-        #respeck_dataframe = respeck_dataframe.sort_values(by=['R_subject_id', 'R_activity_code', 'timestamp']).reset_index(drop=True)
         respeck = True
     except:
         print("Respeck file was not found.")
     if respeck and thingy:
-        dataframe = pd.concat([thingy_dataframe, respeck_dataframe], axis=1)
-        dataframe = dataframe.loc[dataframe['R_activity_code'] == dataframe['T_activity_code']]
-        if not movement:
-            dataframe = dataframe.loc[dataframe['R_activity_type'] != 'Movement']
-        #dataframe.to_csv("sorted_everything.csv")
+        # Respeck data and thingy data are not synchronized
+        # Even with the method below, we can't 100% make sure that they are synchronized without checking at the data manually, which would take years to do
+        thingy_dataframe = thingy_dataframe.sort_values(by=['T_subject_id', 'T_activity_code', 'timestamp']).reset_index(drop=True)
+        thingy_dataframe = thingy_dataframe.loc[:, ['T_accel_x', 'T_accel_y', 'T_accel_z', 'T_gyro_x', 'T_gyro_y', 'T_gyro_z', 'mag_x', 'mag_y', 'mag_z', 
+                                                'T_subject_id', 'T_activity_code', 'T_activity_type']]
+        respeck_dataframe = respeck_dataframe.sort_values(by=['R_subject_id', 'R_activity_code', 'timestamp']).reset_index(drop=True)
+        respeck_dataframe = respeck_dataframe.loc[:, ['R_accel_x', 'R_accel_y', 'R_accel_z', 'R_gyro_x', 'R_gyro_y', 'R_gyro_z', 'R_subject_id',
+                                                'R_activity_code', 'R_activity_type']]
+        i = 0
+        j = 0
+        lastid = thingy_dataframe['T_subject_id'].iloc[0]
+        last = thingy_dataframe['T_activity_code'].iloc[0]
+        drop_thingy = []
+        drop_respeck = []
+        while i < len(thingy_dataframe) and j < len(respeck_dataframe):
+            if thingy_dataframe['T_activity_code'].iloc[i] != respeck_dataframe['R_activity_code'].iloc[j] \
+                or thingy_dataframe['T_subject_id'].iloc[i] != respeck_dataframe['R_subject_id'].iloc[j]:
+                if thingy_dataframe['T_activity_code'].iloc[i] != last or thingy_dataframe['T_subject_id'].iloc[i] != lastid:
+                    drop_respeck.append(j)
+                    j+=1
+                if respeck_dataframe['R_activity_code'].iloc[j] != last or respeck_dataframe['R_subject_id'].iloc[j] != lastid:
+                    drop_thingy.append(i)
+                    i+=1
+            else:
+                last = thingy_dataframe['T_activity_code'].iloc[i]
+                lastid = thingy_dataframe['T_subject_id'].iloc[i]
+                i+=1
+                j+=1
+        dataframe = pd.concat([thingy_dataframe.drop(drop_thingy).reset_index(drop=True), respeck_dataframe.drop(drop_respeck).reset_index(drop=True)], axis=1)
+        dataframe = dataframe.dropna()
     elif respeck:
         dataframe = respeck_dataframe
-        if not movement:
-            dataframe = dataframe.loc[dataframe['R_activity_type'] != 'Movement']
     elif thingy:
         dataframe = thingy_dataframe
-        if not movement:
-            dataframe = dataframe.loc[dataframe['T_activity_type'] != 'Movement']
     else:
         print("No file was found.")
         return pd.DataFrame(), False, False
@@ -121,10 +140,8 @@ if __name__ == "__main__":
     my_parser.add_argument('--model_path', action='store', type=str, required=True)
     my_parser.add_argument('--thingy_file', action='store', type=str, default=None)
     my_parser.add_argument('--respeck_file', action='store', type=str, default=None)
-    my_parser.add_argument('--movement', action='store', type=bool, default=False)
     args = my_parser.parse_args()
     
-    movement = args.movement
     dataframe, thingy, respeck = csv_to_dataframe(args.thingy_file, args.respeck_file)
     if dataframe.empty:
         print("Please provide a correct file path.")
@@ -134,15 +151,8 @@ if __name__ == "__main__":
     Thingy_label = ['T_activity_type']
     Respect_columns = ['R_accel_x', 'R_accel_y', 'R_accel_z', 'R_gyro_x', 'R_gyro_y', 'R_gyro_z']
     Respect_label = ['R_activity_type']
-    if movement:
-        label = np.array([['Climbing stairs'], ['Descending stairs'], ['Desk work'],
-                ['Lying down left'], ['Lying down on back'], ['Lying down on stomach'],
-                ['Lying down right'],['Movement'], ['Running'], ['Sitting'],
-                ['Sitting bent backward'], ['Sitting bent forward'], ['Standing'],
-                ['Walking at normal speed']])
-    else:        
-        label = np.array([['Sitting'], ['Walking at normal speed'], ['Lying down on back'], ['Sitting bent forward'], ['Sitting bent backward'], ['Lying down right'],
-                          ['Lying down left'], ['Lying down on stomach'],  ['Running'], ['Climbing stairs'], ['Descending stairs'], ['Desk work'], ['Standing']])
+    label = np.array([['Sitting'], ['Walking at normal speed'], ['Lying down on back'], ['Sitting bent forward'], ['Sitting bent backward'], ['Lying down right'],
+                    ['Lying down left'], ['Lying down on stomach'], ['Movement'], ['Running'], ['Climbing stairs'], ['Descending stairs'], ['Desk work'], ['Standing']])
     
     if thingy and respeck:
         X, y = create_dataset(dataframe, Thingy_columns + Respect_columns, Respect_label, 50, 10)
