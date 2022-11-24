@@ -109,7 +109,7 @@ def create_dataset(dataframe, data_columns, label_column, time_steps=50, step=10
     Y = np.array(YY)
     return X, Y
       
-def plot_cm(y_true, y_pred, class_names):
+def plot_cm(y_true, y_pred, class_names, respeck, thingy):
     cm = confusion_matrix(y_true, y_pred, labels=class_names, normalize='true')
     register_matplotlib_converters()
     sns.set(style='whitegrid', palette='muted', font_scale=1)
@@ -132,7 +132,12 @@ def plot_cm(y_true, y_pred, class_names):
     b += 0.5
     t -= 0.5
     plt.ylim(b, t)
-    plt.savefig('confusion_matrix.png') 
+    if respeck and thingy:
+        plt.savefig('confusion_matrix.png') 
+    elif respeck:
+        plt.savefig('confusion_matrix_respeck.png')
+    elif thingy:
+        plt.savefig('confusion_matrix_thingy.png')
         
 if __name__ == "__main__":       
 
@@ -195,4 +200,4 @@ if __name__ == "__main__":
 
     #print(report)
 
-    plot_cm(y, y_pred_binary, encoder.categories_[0])
+    plot_cm(y, y_pred_binary, encoder.categories_[0], respeck, thingy)
